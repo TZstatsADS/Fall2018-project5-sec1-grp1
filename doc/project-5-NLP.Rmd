@@ -3,9 +3,9 @@ title: "Project 5 - Spam Forecasting (NLP)"
 author: "Hongyu Ji, Amon Tokoro, Hengyang Lin"
 date: "12/5/2018"
 output:
-  pdf_document: default
   html_document:
     df_print: paged
+  pdf_document: default
 ---
 Motivation & Analysis Procedure:
 Many of us are already aware of spam detection which plays a significant role in the world. All of email services have a functionality of it to protect users from potential fear of frauds. With this set, given the dataset with label (spam or ham) and texts on email, we would like to explore this study field, find out the contextural tendency and build a model capable of calssifying the email. We trimed punctuations and numbers when creating a corpus because they would frequently appear on spam mail, and we would like to more focus on texts rather than those.
@@ -87,7 +87,7 @@ dtm <- TermDocumentMatrix(docs)
 m <- as.matrix(dtm)
 v <- sort(rowSums(m),decreasing=TRUE)
 d <- data.frame(word = names(v),freq=v)
-
+par(mfrow=c(1,2))
 set.seed(1234)
 wordcloud(words = d$word, freq = d$freq, min.freq = 1,
           max.words=100, random.order=FALSE, rot.per=0.35, 
@@ -114,6 +114,7 @@ m <- as.matrix(dtm)
 v <- sort(rowSums(m),decreasing=TRUE)
 d <- data.frame(word = names(v),freq=v)
 
+par(mfrow=c(1,2))
 set.seed(1234)
 wordcloud(words = d$word, freq = d$freq, min.freq = 1,
           max.words=100, random.order=FALSE, rot.per=0.35, 
@@ -165,6 +166,35 @@ kjv_bigrams <- function(data){
 #Visualize paired words 
 kjv_bigrams(ham_df)
 kjv_bigrams(spam_df)
+```
+
+```{r}
+filtered_bigrams <- function(dataset){
+  dataset %>%
+    unnest_tokens(bigram,Message,token = "ngrams", n =2) %>%
+    separate(bigram,c("word1","word2"),sep=" ") %>%
+    filter(!word1 %in% stop_words$word,
+           !word2 %in% stop_words$word)
+  
+}
+
+spam_united <- filtered_bigrams(spamdt) %>%
+  unite(bigram,word1,word2,sep=" ") 
+
+spam_tf_idf <- spam_united %>%
+  count(Category, bigram) %>%
+  bind_tf_idf(bigram,Category,n) %>%
+  arrange(desc(tf_idf))
+
+ spam_tf_idf %>%
+  arrange(desc(tf_idf)) %>%
+  mutate(bigram=factor(bigram,levels=rev(unique(bigram)))) %>%
+  group_by(Category) %>%
+  top_n(10) %>%
+  ungroup %>%
+  ggplot(aes(bigram,tf_idf,fill = Category)) + geom_col(show.legend = FALSE) + labs(x = NULL, y = "probability") + geom_bar(stat = "identity")+facet_wrap(~Category,scales = "free") + coord_flip()
+  
+         
 ```
 
 In this two chunks, we split the dataset into a training set and test set for building a model in the rest of the process.  
@@ -513,7 +543,7 @@ performance_matrix[1,4] <- mean(svm.pred == testset3$rate)
 performance_matrix[2,4] <- recall4
 performance_matrix[3,4] <- precision4
 
-performance_matrix
+#performance_matrix
 library(knitr)
 kable(performance_matrix)
 ```
