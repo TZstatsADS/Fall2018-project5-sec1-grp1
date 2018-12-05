@@ -1,0 +1,522 @@
+---
+title: "Project 5 - Spam Forecasting (NLP)"
+author: "Hongyu Ji, Amon Tokoro, Hengyang Lin"
+date: "12/5/2018"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+Motivation & Analysis Procedure:
+Many of us are already aware of spam detection which plays a significant role in the world. All of email services have a functionality of it to protect users from potential fear of frauds. With this set, given the dataset with label (spam or ham) and texts on email, we would like to explore this study field, find out the contextural tendency and build a model capable of calssifying the email. We trimed punctuations and numbers when creating a corpus because they would frequently appear on spam mail, and we would like to more focus on texts rather than those.
+
+# Step 0 -- Data Preprocessing
+## Loading library
+We first load all of necessary packages, and read the dataset. After that, the dataset is split into two data frame based on the labeled category.
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+library(quanteda)
+library(RColorBrewer)
+library(tm)
+library(tidytext)
+library(tidyverse)
+library(DT)
+library(scales)
+library(wordcloud2)
+library(gridExtra)
+library(ngram)
+library(ggplot2)
+library("rvest")
+library("tibble")
+library("sentimentr")
+library("gplots")
+library("dplyr")
+library("tm")
+library("syuzhet")
+library("factoextra")
+library("beeswarm")
+library("scales")
+library("RColorBrewer")
+library("RANN")
+library("topicmodels")
+library(wordcloud)
+library(cluster)
+library(fpc)
+library(textmineR)
+library(rpart)
+library(rpart.plot)
+library(purrr)
+library(reshape2)
+library("dendextend")
+library('glmnet')
+library(SnowballC)
+library(randomForest)
+library(AUC)
+library(e1071)
+library(topicmodels)
+library(tm)
+library(tidyr)
+library(igraph)
+library(ggraph)
+
+spamdt <- read.csv("/Users/amon/Desktop/text.csv")
+
+#Separate into two data frame based on the category
+spam_df <- spamdt %>%
+  filter(Category == "spam")
+
+ham_df <- spamdt %>%
+  filter(Category == "ham")
+
+```
+
+
+## Word Cloud
+We are now intersted in the top 100 words which the most frequently appear in the messages and quantify the frequency of those words by a bar chart.The first wordcloud and bar chart are for Spam and the second ones are for ham. 
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+docs <- Corpus(VectorSource(spamdt$Message[which(spamdt$Category=="spam")]))
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeNumbers)
+docs <- tm_map(docs, removeWords, stopwords("english"))
+docs <- tm_map(docs, removeWords, c("blabla1", "blabla2")) 
+docs <- tm_map(docs, removePunctuation)
+docs <- tm_map(docs, stripWhitespace)
+
+dtm <- TermDocumentMatrix(docs)
+
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+
+set.seed(1234)
+wordcloud(words = d$word, freq = d$freq, min.freq = 1,
+          max.words=100, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"))
+
+ggplot(d[1:15,])+
+  geom_bar(aes(d$word[1:15], d$freq[1:15]), stat = 'identity') + labs(title="Bar Chart for Spam") + xlab("Words") + ylab("Frequency")
+
+```
+
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+docs <- Corpus(VectorSource(spamdt$Message[which(spamdt$Category=="ham")]))
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeNumbers)
+docs <- tm_map(docs, removeWords, stopwords("english"))
+docs <- tm_map(docs, removeWords, c("blabla1", "blabla2")) 
+docs <- tm_map(docs, removePunctuation)
+docs <- tm_map(docs, stripWhitespace)
+
+dtm <- TermDocumentMatrix(docs)
+
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+
+set.seed(1234)
+wordcloud(words = d$word, freq = d$freq, min.freq = 1,
+          max.words=100, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"))
+
+ggplot(d[1:15,])+
+  geom_bar(aes(d$word[1:15], d$freq[1:15]), stat = 'identity') + labs(title="Bar Chart for Ham") + xlab("Words") + ylab("Frequency")
+
+```
+
+
+##Bigram
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+count_bigrams <- function(dataset) {
+  dataset %>%
+    unnest_tokens(bigram, Message, token = "ngrams", n = 2) %>%
+    separate(bigram, c("word1", "word2"), sep = " ") %>%
+    filter(!word1 %in% stop_words$word,
+           !word2 %in% stop_words$word) %>%
+    count(word1, word2, sort = TRUE)
+}
+
+visualize_bigrams <- function(bigrams) {
+  set.seed(2016)
+  a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+  
+  bigrams %>%
+    graph_from_data_frame() %>%
+    ggraph(layout = "fr") +
+    geom_edge_link(aes(edge_alpha = n), show.legend = FALSE, arrow = a) +
+    geom_node_point(color = "lightblue", size = 5) +
+    geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+    theme_void()
+}
+
+kjv_bigrams <- function(data){
+  data %>%
+  count_bigrams() %>%
+#kjv_bigrams %>%
+  filter(n > 10,
+         !str_detect(word1, "\\d"),
+         !str_detect(word2, "\\d")) %>%
+  visualize_bigrams()
+}
+```
+
+```{r}
+#Visualize paired words 
+kjv_bigrams(ham_df)
+kjv_bigrams(spam_df)
+```
+
+In this two chunks, we split the dataset into a training set and test set for building a model in the rest of the process.  
+
+```{r}
+spamdt <- spamdt[sample(nrow(spamdt)),]
+spamdt$Message <- as.character(spamdt$Message)
+msg.corpus<-corpus(spamdt$Message)
+docvars(msg.corpus) <- spamdt$Category
+```
+
+
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+#separating Train and test data
+spam.train<-spamdt[1:4458,]
+spam.test<-spamdt[4458:nrow(spamdt),]
+
+msg.dfm <- dfm(msg.corpus, tolower = TRUE)  #generating document freq matrix
+msg.dfm <- dfm_trim(msg.dfm, min_count = 5, min_docfreq = 3)  
+msg.dfm <- dfm_weight(msg.dfm) 
+
+head(msg.dfm)
+
+#training and testing data of dfm 
+msg.dfm.train<-msg.dfm[1:4458,]
+
+msg.dfm.test<-msg.dfm[4458:nrow(spamdt),]
+```
+#Model Creation
+We first choose Naive Bayes because it is a baseline moethod for text categorization. After that, we explored other algorithms: Decision Tree, Random Forest, and SVM. 
+
+#Naive Bayes
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+nb.classifier<-textmodel_nb(msg.dfm.train,spam.train[,1])
+nb.classifier
+```
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+pred<-predict(nb.classifier,msg.dfm.test)
+
+#generating a confusion matrix
+
+# use pred$nb.predicted to extract the class labels
+(t1 <- table(predicted=pred,actual=spam.test[,1]))
+(recall1 <- t1[4]/(t1[4] + t1[3]))
+(precision1 <- t1[4]/(t1[4] + t1[2]))
+mean(pred==spam.test[,1])
+```
+
+
+### Predictive Model
+Since we have a list of reviews and the individual rating from such reviews, we can construct a predictive model to determine what are the words that are determinant in prediction of the rating of a review.
+
+# Data Preprocessing
+We create a corpus and convert it into a document term matrix. 
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+corpus.list <- as.vector(spamdt$Message)
+
+docs <- Corpus(VectorSource(corpus.list))
+docs <- tm_map(docs,content_transformer(tolower))
+docs <- tm_map(docs, removePunctuation)
+docs <- tm_map(docs, removeNumbers)
+docs <- tm_map(docs, removeWords, stopwords("english"))
+docs <- tm_map(docs, stripWhitespace)
+docs <- tm_map(docs,stemDocument)
+
+dtm <- DocumentTermMatrix(docs)
+dtm <- removeSparseTerms(dtm, 0.995)
+
+```
+
+
+# Bag of Word Matrix
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+dtm.df <- data.frame(as.matrix(dtm), stringsAsFactors=FALSE)
+dtm.df$rate <- spamdt$Category
+```
+
+
+## Decision Tree
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+train.ind <- sample(1:nrow(dtm.df), round(7*nrow(dtm.df)/10))
+test.ind <- setdiff(1:nrow(dtm.df), train.ind)
+trainset2 <- dtm.df[train.ind,]
+testset2 <- dtm.df[test.ind, ]
+```
+
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+control = rpart.control(minsplit=10, minbucket = 5)
+tree <- rpart(rate ~., data = trainset2, method = 'class', control = control)
+#plot(tree)
+#text(tree, cex=0.8)
+#prp(tree, extra=7, prefix="fraction\n")
+tree.pred <- predict(tree, newdata = testset2[,-which(names(testset2) == 'rate')])
+#mean( (testset2[,which(names(testset2) == 'rate')] - tree.pred)^2 )
+#tree
+#summary(tree)
+#printcp(tree)
+```
+
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+tree1 <- prune(tree, cp = .012) # prune tree using the one-standard deviation rule
+tree.pred <- predict(tree1, newdata = testset2[,-which(names(testset2) == 'rate')],type = c("class"))
+prediction <- as.numeric(tree.pred > 0.5)
+#print(head(prediction))
+#plot(tree1)
+#text(tree1)
+#mean( (testset2[,which(names(testset2) == 'rate')] - tree.pred)^2 )
+(t2 <- table(predicted=tree.pred,actual=testset2$rate))
+(recall2 <- t2[4]/(t2[4] + t2[3]))
+(precision2 <- t2[4]/(t2[4] + t2[2]))
+mean(testset2$rate==tree.pred)
+```
+
+
+
+## Random Forest
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+rf <- randomForest(rate ~.,
+                      data=dtm.df, 
+                      importance=TRUE, 
+                      ntree=500,
+                      mtry = round(sqrt(ncol(trainset2))))
+```
+
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+plot(rf)
+rf.word <- as.data.frame.matrix(rf$importance)
+#rf.word <- rf.word[order(rf.word$`%IncMSE`, decreasing = T),]
+varImpPlot(rf,type=1)
+```
+%IncMse means by removing this variable, it will increase MSE by %IncMSE. RF cannot result the pos and neg correlation between predictors and response, but it tends to have higher accuracy.
+
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+#mean( (dtm.df$rate - round(rf$predicted))^2 )
+(t3 <- table(predicted=rf$predicted,actual=dtm.df$rate))
+(recall3 <- t3[4]/(t3[4] + t3[3]))
+(precision3 <- t3[4]/(t3[4] + t3[2]))
+mean(dtm.df$rate == rf$predicted)
+```
+
+## SVM
+
+# Linear SVM
+
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+trainset3 <- trainset2[sample(1:nrow(trainset2), round(nrow(trainset2)/5)),]
+testset3 <- testset2[sample(1:nrow(testset2), round(nrow(testset2)/5)),]
+# scaling?
+```
+
+
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+svm.m <-  tune.svm(rate ~., data = trainset3, gamma = 10^(-5:-1), cost = 10^(0:4), scale = F)
+```
+
+
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+print(svm.m)
+#plot(svm.m)
+```
+From the initial svm, we saw that mse tend to be smaller as gamma decreases and as cost increases. Initial range gamma = 0:1, cost = 0:10
+
+
+```{r message = FALSE, warning=FALSE}
+svm.best <- svm.m$best.model
+svm.pred <- predict(svm.best, testset3)
+#mean((svm.pred - testset3$rate)^2)
+(t4 <- table(predicted=svm.pred,actual=testset3$rate))
+(recall4 <- t4[4]/(t4[4] + t4[3]))
+(precision4 <- t4[4]/(t4[4] + t4[2]))
+mean(svm.pred == testset3$rate)
+
+```
+
+
+## XGBoost
+
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+# dtrain <- xgb.DMatrix(data = as.matrix(trainset2[,-which(names(trainset2) == 'rate')]), label = as.numeric(trainset2[,which(names(trainset2) == 'rate')]))
+# Dtest <- xgb.DMatrix(data = as.matrix(testset2[,-which(names(testset2) == 'rate')]), label = testset2[,which(names(testset2) == 'rate')])
+```
+
+
+# tuning
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+# params <- list(booster = "gbtree", objective = "reg:linear", eta=0.1, gamma=0, max_depth=6, min_child_weight=1, subsample=1, colsample_bytree=1)
+# 
+# xgbcv <- xgb.cv( params = params, data = dtrain, nrounds = 1000, nfold = 5, showsd = T, stratified = T, print_every_n = 10, early_stop_round = 200, maximize = F)
+```
+
+
+# fitting model
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+# xgb1 <- xgb.train (data = dtrain, max_depth=2,eta=1,nthread=2, nrounds = 100, watchlist = list(val=Dtest,train=dtrain), objective="reg:logistic")
+# 
+# xgb1 <- xgb.train(data = dtrain, nrounds = 100, watchlist = list(val=Dtest,train=dtrain), print_every_n = 10, early_stop_round = 150, maximize = F,objective = "binary:logistic")
+```
+
+
+# prediction
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+
+# xgbpred <- predict_proba(xgb1,Dtest)
+# #mean((xgbpred - testset2$rate)^2)
+# 
+# mean(xgbpred == testset2$rate)
+```
+
+
+# important variable
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+# mat <- xgb.importance (feature_names = colnames(trainset2),model = xgb1)
+# xgb.plot.importance (importance_matrix = mat[1:20]) 
+```
+
+
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+#for(depth in c(1,2,5)){
+#  for(subsamp in c(0.5, 0.7, 1)){
+# xgb.m <- xgboost(data = dtrain, 
+#                booster = "gbtree", 
+#                            nrounds = 217,
+#                            verbose = F,
+#                            objective = "reg:linear", max.depth = 1, "eta" 
+#                            =2/217,subsample = 0.5)
+# xg.pred <- predict(xgb.m, Dtest)
+# rmse <- mean((xg.pred - Dtest$rate)^2)
+# print( c(depth,subsamp, rmse))
+```
+
+
+
+
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+
+# xg2 <- xgboost(data = dtrain , 
+#         booster = "gbtree", 
+#         objective = "reg:linear", 
+#         max.depth = 2, 
+#         eta = 0.05, 
+#         nthread = 2, 
+#         nround = 10000, 
+#         min_child_weight = 1, 
+#         subsample = 0.5, 
+#         colsample_bytree = 1, 
+#         num_parallel_tree = 3)
+```
+
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+# xg.pred <- predict(xg2, Dtest)
+# mean(((xg.pred) - testset2[,which(names(testset2)=='rate')])^2)
+```
+
+
+
+
+
+
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+# Dtest <- xgb.DMatrix(data = as.matrix(testset2[,-which(names(testset2) == 'rate')]), label = testset2[,which(names(testset2) == 'rate')])
+# xg.pred <- predict(xg6, Dtest)
+# mean(((xg.pred) - testset2[,which(names(testset2)=='rate')])^2)
+```
+
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+# result.xgb <- data.frame(depth = rep(NA,25), para_tree = rep(NA, 25), mse = rep(NA,25))
+# k <- 1
+# for(depth in c(1:5)){
+#   for(paraTree in c(1:5)){
+#     xgLoop <- xgboost(data = dtrain , 
+#         booster = "gbtree", 
+#         objective = "reg:linear", 
+#         max.depth = 1, 
+#         eta = 0.05, 
+#         nthread = 2, 
+#         nround = 1200, 
+#         min_child_weight = 1, 
+#         subsample = 0.5, 
+#         colsample_bytree = 1, 
+#         num_parallel_tree = 1,
+#         verbose = 0)
+#     xgLoop.pred <- predict(xgLoop, Dtest)
+#     xgb.mse <- mean(((xgLoop.pred) - testset2[,which(names(testset2)=='rate')])^2)
+#     cat('depth:', depth, ', para_tree:', paraTree, ', MSE:', xgb.mse, '\n')
+#     result.xgb$depth[k] = depth
+#     result.xgb$para_tree[k] = paraTree
+#     result.xgb$mse[k] = xgb.mse
+#     k <- k+1
+#   }
+# }
+
+```
+
+
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+# result.xgb.linear <- data.frame(depth = rep(NA,30), para_tree = rep(NA, 30), mse = rep(NA,30))
+# k <- 1
+# for(l in seq(0,1,0.2)){
+#   for(a in seq(0,2,0.5)){
+#     xgLoop <- xgboost(data = dtrain , 
+#         nrounds = 1200,
+#         booster = "gblinear", 
+#         objective = "reg:linear", 
+#         lambda = l,
+#         alpha = a,
+#         verbose = 0)
+#     xgLoop.pred <- predict(xgLoop, Dtest)
+#     xgb.mse <- mean(((xgLoop.pred) - testset2[,which(names(testset2)=='rate')])^2)
+#     cat('lambda:', l, ', alpha:', a, ', MSE:', xgb.mse, '\n')
+#     result.xgb.linear$lambda[k] = l
+#     result.xgb.linear$alpha[k] = a
+#     result.xgb.linear$mse[k] = xgb.mse
+#     k <- k+1
+#   }
+# }
+```
+
+```{r message = FALSE, warning=FALSE, echo=FALSE}
+performance_matrix <- as.data.frame(matrix(0, ncol = 4, nrow = 3))
+names(performance_matrix) <- c("Naive Bayes", "Decision Tree", "Random Forest", "SVM")
+rownames(performance_matrix) <- c("accuracy", "recall","precision")
+performance_matrix[1,1] <- mean(pred==spam.test[,1])
+performance_matrix[2,1] <- recall1
+performance_matrix[3,1] <- precision1
+
+performance_matrix[1,2] <- mean(testset2$rate==tree.pred)
+performance_matrix[2,2] <- recall2
+performance_matrix[3,2] <- precision2
+
+performance_matrix[1,3] <- mean(dtm.df$rate == rf$predicted)
+performance_matrix[2,3] <- recall3
+performance_matrix[3,3] <- precision3
+
+performance_matrix[1,4] <- mean(svm.pred == testset3$rate)
+performance_matrix[2,4] <- recall4
+performance_matrix[3,4] <- precision4
+
+performance_matrix
+library(knitr)
+kable(performance_matrix)
+```
+
+Conclusion: 
+All of the models that we built have relatively robust accurecy on spam detection. The Naive Bayes and Random Forest are the best two models of ours in those four to predict spam detection. 
