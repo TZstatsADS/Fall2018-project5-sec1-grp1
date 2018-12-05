@@ -58,7 +58,7 @@ library(tidyr)
 library(igraph)
 library(ggraph)
 
-spamdt <- read.csv("/Users/amon/Desktop/text.csv")
+spamdt <- read.csv("../data/text.csv")
 
 #Separate into two data frame based on the category
 spam_df <- spamdt %>%
