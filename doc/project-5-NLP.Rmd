@@ -3,9 +3,9 @@ title: "Project 5 - Spam Forecasting (NLP)"
 author: "Hongyu Ji, Amon Tokoro, Hengyang Lin"
 date: "12/5/2018"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
-  pdf_document: default
 ---
 Motivation & Analysis Procedure:
 Many of us are already aware of spam detection which plays a significant role in the world. All of email services have a functionality of it to protect users from potential fear of frauds. With this set, given the dataset with label (spam or ham) and texts on email, we would like to explore this study field, find out the contextural tendency and build a model capable of calssifying the email. We trimed punctuations and numbers when creating a corpus because they would frequently appear on spam mail, and we would like to more focus on texts rather than those.
