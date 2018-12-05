@@ -7,7 +7,7 @@ Term: Fall 2018
 + Team members
 	+ Hongyu Ji hj2475@columbia.edu 
 	+ Hengyang Lin hl3116@columbia.edu
-	+ Amon Tokoro 
+	+ Amon Tokoro at3250@columbia.edu
 + Project summary: Using Naive Bayes, Decision Tree, Random Forest and SVM to predict whether a email is spam or not. 
 	
 **Contribution statement**: ([default](doc/a_note_on_contributions.md)) All team members contributed equally in all stages of this project. All team members approve our work presented in this GitHub repository including this contributions statement. 
