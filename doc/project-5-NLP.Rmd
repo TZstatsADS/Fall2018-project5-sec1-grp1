@@ -3,9 +3,9 @@ title: "Project 5 - Spam Forecasting (NLP)"
 author: "Hongyu Ji, Amon Tokoro, Hengyang Lin"
 date: "12/5/2018"
 output:
-  pdf_document: default
   html_document:
     df_print: paged
+  pdf_document: default
 ---
 Motivation & Analysis Procedure:
 Many of us are already aware of spam detection which plays a significant role in the world. All of email services have a functionality of it to protect users from potential fear of frauds. With this set, given the dataset with label (spam or ham) and texts on email, we would like to explore this study field, find out the contextural tendency and build a model capable of calssifying the email. We trimed punctuations and numbers when creating a corpus because they would frequently appear on spam mail, and we would like to more focus on texts rather than those.
@@ -381,7 +381,7 @@ mean(svm.pred == testset3$rate)
 ```
 
 
-## XGBoost
+
 
 ```{r message = FALSE, warning=FALSE, echo=FALSE}
 # dtrain <- xgb.DMatrix(data = as.matrix(trainset2[,-which(names(trainset2) == 'rate')]), label = as.numeric(trainset2[,which(names(trainset2) == 'rate')]))
@@ -389,7 +389,7 @@ mean(svm.pred == testset3$rate)
 ```
 
 
-# tuning
+
 ```{r message = FALSE, warning=FALSE, echo=FALSE}
 # params <- list(booster = "gbtree", objective = "reg:linear", eta=0.1, gamma=0, max_depth=6, min_child_weight=1, subsample=1, colsample_bytree=1)
 # 
@@ -397,7 +397,7 @@ mean(svm.pred == testset3$rate)
 ```
 
 
-# fitting model
+
 ```{r message = FALSE, warning=FALSE, echo=FALSE}
 # xgb1 <- xgb.train (data = dtrain, max_depth=2,eta=1,nthread=2, nrounds = 100, watchlist = list(val=Dtest,train=dtrain), objective="reg:logistic")
 # 
@@ -405,7 +405,7 @@ mean(svm.pred == testset3$rate)
 ```
 
 
-# prediction
+
 ```{r message = FALSE, warning=FALSE, echo=FALSE}
 
 # xgbpred <- predict_proba(xgb1,Dtest)
@@ -415,7 +415,7 @@ mean(svm.pred == testset3$rate)
 ```
 
 
-# important variable
+
 ```{r message = FALSE, warning=FALSE, echo=FALSE}
 # mat <- xgb.importance (feature_names = colnames(trainset2),model = xgb1)
 # xgb.plot.importance (importance_matrix = mat[1:20]) 
