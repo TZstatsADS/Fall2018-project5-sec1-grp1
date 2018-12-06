@@ -2,8 +2,8 @@
 
 Term: Fall 2018
 
-+ Team # 1
-+ Projec title: Spam Email Forecasting
++ Team 1 (Section 1)
++ Project title: Spam Email Forecasting
 + Team members
 	+ Hongyu Ji hj2475@columbia.edu 
 	+ Hengyang Lin hl3116@columbia.edu
